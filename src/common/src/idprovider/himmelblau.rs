@@ -98,7 +98,10 @@ impl RefreshCache {
         let refresh_cache = self.refresh_cache.read().await;
         match refresh_cache.get(account_id.to_lowercase().as_str()) {
             Some((refresh_token, _)) => Ok(refresh_token.clone()),
-            None => Err(IdpError::NotFound),
+            None => Err(IdpError::NotFound {
+                what: "refresh token".to_string(),
+                where_: "refresh_cache".to_string(),
+            }),
         }
     }
 
@@ -296,10 +299,16 @@ impl IdProvider for HimmelblauMultiProvider {
                             .unix_user_access(id, scopes, old_token, client_id, tpm, machine_key)
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_access for domain {}", domain),
+                    }),
                 }
             }
-            None => Err(IdpError::NotFound),
+            None => Err(IdpError::NotFound {
+                what: "domain".to_string(),
+                where_: format!("unix_user_access for account {}", account_id),
+            }),
         }
     }
 
@@ -350,10 +359,16 @@ impl IdProvider for HimmelblauMultiProvider {
                             .unix_user_prt_cookie(id, old_token, tpm, machine_key)
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_prt_cookie for domain {}", domain),
+                    }),
                 }
             }
-            None => Err(IdpError::NotFound),
+            None => Err(IdpError::NotFound {
+                what: "domain".to_string(),
+                where_: format!("unix_user_prt_cookie for account {}", account_id),
+            }),
         }
     }
 
@@ -382,10 +397,16 @@ impl IdProvider for HimmelblauMultiProvider {
                             )
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("change_auth_token for domain {}", domain),
+                    }),
                 }
             }
-            None => Err(IdpError::NotFound),
+            None => Err(IdpError::NotFound {
+                what: "domain".to_string(),
+                where_: format!("change_auth_token for account {}", account_id),
+            }),
         }
     }
 
@@ -411,10 +432,16 @@ impl IdProvider for HimmelblauMultiProvider {
                             .unix_user_get(id, old_token, keystore, tpm, machine_key)
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_get for domain {}", domain),
+                    }),
                 }
             }
-            None => Err(IdpError::NotFound),
+            None => Err(IdpError::NotFound {
+                what: "domain".to_string(),
+                where_: format!("unix_user_get for account {}", account_id),
+            }),
         }
     }
 
@@ -445,12 +472,18 @@ impl IdProvider for HimmelblauMultiProvider {
                             )
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_online_auth_init for domain {}", domain),
+                    }),
                 }
             }
             None => {
                 debug!("Authentication ignored for local user '{}'", account_id);
-                Err(IdpError::NotFound)
+                Err(IdpError::NotFound {
+                    what: "domain".to_string(),
+                    where_: format!("unix_user_online_auth_init for account {}", account_id),
+                })
             }
         }
     }
@@ -488,12 +521,18 @@ impl IdProvider for HimmelblauMultiProvider {
                             )
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_online_auth_step for domain {}", domain),
+                    }),
                 }
             }
             None => {
                 debug!("Authentication ignored for local user '{}'", account_id);
-                Err(IdpError::NotFound)
+                Err(IdpError::NotFound {
+                    what: "domain".to_string(),
+                    where_: format!("unix_user_online_auth_step for account {}", account_id),
+                })
             }
         }
     }
@@ -514,12 +553,18 @@ impl IdProvider for HimmelblauMultiProvider {
                             .unix_user_offline_auth_init(account_id, token, no_hello_pin, keystore)
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_offline_auth_init for domain {}", domain),
+                    }),
                 }
             }
             None => {
                 debug!("Authentication ignored for local user '{}'", account_id);
-                Err(IdpError::NotFound)
+                Err(IdpError::NotFound {
+                    what: "domain".to_string(),
+                    where_: format!("unix_user_offline_auth_init for account {}", account_id),
+                })
             }
         }
     }
@@ -553,12 +598,18 @@ impl IdProvider for HimmelblauMultiProvider {
                             )
                             .await
                     }
-                    None => Err(IdpError::NotFound),
+                    None => Err(IdpError::NotFound {
+                        what: "provider".to_string(),
+                        where_: format!("unix_user_offline_auth_step for domain {}", domain),
+                    }),
                 }
             }
             None => {
                 debug!("Authentication ignored for local user '{}'", account_id);
-                Err(IdpError::NotFound)
+                Err(IdpError::NotFound {
+                    what: "domain".to_string(),
+                    where_: format!("unix_user_offline_auth_step for account {}", account_id),
+                })
             }
         }
     }
@@ -597,6 +648,13 @@ impl IdProvider for HimmelblauMultiProvider {
             }
         }
         CacheState::Online
+    }
+
+    async fn offline_break_glass(&self, ttl: Option<u64>) -> Result<(), IdpError> {
+        for (_domain, provider) in self.providers.read().await.iter() {
+            provider.offline_break_glass(ttl).await?;
+        }
+        Ok(())
     }
 }
 
@@ -871,7 +929,10 @@ impl IdProvider for HimmelblauProvider {
 
         let amr_ngcmfa = token.amr_ngcmfa().map_err(|e| {
             error!("{:?}", e);
-            IdpError::NotFound
+            IdpError::NotFound {
+                what: "amr_ngcmfa claim".to_string(),
+                where_: "change_auth_token token".to_string(),
+            }
         })?;
 
         let hello_tag = self.fetch_hello_key_tag(account_id, amr_ngcmfa);
@@ -1499,7 +1560,7 @@ impl IdProvider for HimmelblauProvider {
                             return Err(IdpError::BadRequest);
                         }
                     }
-                    Err(IdpError::NotFound) => {}
+                    Err(IdpError::NotFound { .. }) => {}
                     Err(e) => {
                         error!(?e, "Failed to enroll in Intune");
                         return Err(e);
@@ -1573,14 +1634,23 @@ impl IdProvider for HimmelblauProvider {
                                         Ok(token) => token,
                                         Err(e) => {
                                             error!("{:?}", e);
-                                            return Err(IdpError::NotFound);
+                                            return Err(IdpError::NotFound {
+                                                what: "token".to_string(),
+                                                where_: "acquire_token_by_refresh_token retry after device auth failure".to_string(),
+                                            });
                                         }
                                     )
                                 } else {
-                                    return Err(IdpError::NotFound);
+                                    return Err(IdpError::NotFound {
+                                        what: "token".to_string(),
+                                        where_: "acquire_token failed with non-device-auth error".to_string(),
+                                    });
                                 }
                             }
-                            _ => return Err(IdpError::NotFound),
+                            _ => return Err(IdpError::NotFound {
+                                what: "token".to_string(),
+                                where_: "acquire_token failed with non-acquire error".to_string(),
+                            }),
                         }
                     }
                 )
@@ -1860,7 +1930,10 @@ impl IdProvider for HimmelblauProvider {
                 // Skip Hello enrollment if the token doesn't have the ngcmfa amr
                 let amr_ngcmfa = token.amr_ngcmfa().map_err(|e| {
                     error!("{:?}", e);
-                    IdpError::NotFound
+                    IdpError::NotFound {
+                        what: "amr_ngcmfa claim".to_string(),
+                        where_: "SetupPin token".to_string(),
+                    }
                 })?;
                 let hello_tag = self.fetch_hello_key_tag(account_id, amr_ngcmfa);
 
@@ -2195,12 +2268,18 @@ impl IdProvider for HimmelblauProvider {
                         // Skip Hello enrollment if the token doesn't have the ngcmfa amr
                         let amr_ngcmfa = token2.amr_ngcmfa().map_err(|e| {
                             error!("{:?}", e);
-                            IdpError::NotFound
+                            IdpError::NotFound {
+                                what: "amr_ngcmfa claim".to_string(),
+                                where_: "token validation".to_string(),
+                            }
                         })?;
                         // If the token at least has an mfa amr, then we can fake a hello key
                         let amr_mfa = token2.amr_mfa().map_err(|e| {
                             error!("{:?}", e);
-                            IdpError::NotFound
+                            IdpError::NotFound {
+                                what: "amr_mfa claim".to_string(),
+                                where_: "token validation".to_string(),
+                            }
                         })?;
                         if !hello_enabled || (!amr_ngcmfa && !amr_mfa) || no_hello_pin {
                             info!("Skipping Hello enrollment because it is disabled");
@@ -2292,12 +2371,18 @@ impl IdProvider for HimmelblauProvider {
                         // Skip Hello enrollment if the token doesn't have the ngcmfa amr
                         let amr_ngcmfa = token2.amr_ngcmfa().map_err(|e| {
                             error!("{:?}", e);
-                            IdpError::NotFound
+                            IdpError::NotFound {
+                                what: "amr_ngcmfa claim".to_string(),
+                                where_: "token validation".to_string(),
+                            }
                         })?;
                         // If the token at least has an mfa amr, then we can fake a hello key
                         let amr_mfa = token2.amr_mfa().map_err(|e| {
                             error!("{:?}", e);
-                            IdpError::NotFound
+                            IdpError::NotFound {
+                                what: "amr_mfa claim".to_string(),
+                                where_: "token validation".to_string(),
+                            }
                         })?;
                         if !hello_enabled || (!amr_ngcmfa && !amr_mfa) || no_hello_pin {
                             info!("Skipping Hello enrollment because it is disabled");
@@ -2401,7 +2486,10 @@ impl IdProvider for HimmelblauProvider {
             }
             _ => {
                 error!("Unexpected AuthCredHandler and PamAuthRequest pairing");
-                Err(IdpError::NotFound)
+                Err(IdpError::NotFound {
+                    what: "valid auth handler".to_string(),
+                    where_: "unix_user_online_auth_step unexpected pairing".to_string(),
+                })
             }
         }
     }
@@ -2554,6 +2642,25 @@ impl IdProvider for HimmelblauProvider {
 
     async fn get_cachestate(&self, _account_id: Option<&str>) -> CacheState {
         (*self.state.lock().await).clone()
+    }
+
+    async fn offline_break_glass(&self, ttl: Option<u64>) -> Result<(), IdpError> {
+        let mut state = self.state.lock().await;
+        let (ttl, enabled) = {
+            let cfg = self.config.read().await;
+            (
+                match ttl {
+                    Some(ttl) => ttl,
+                    None => cfg.get_offline_breakglass_ttl(),
+                },
+                cfg.get_offline_breakglass_enabled(),
+            )
+        };
+        if enabled {
+            let offline_next_check = Duration::from_secs(ttl);
+            *state = CacheState::OfflineNextCheck(SystemTime::now() + offline_next_check);
+        }
+        Ok(())
     }
 }
 
@@ -2801,7 +2908,10 @@ impl HimmelblauProvider {
             }
             None => {
                 info!("Authentication failed for user '{}'", account_id);
-                Err(IdpError::NotFound)
+                Err(IdpError::NotFound {
+                    what: "user".to_string(),
+                    where_: format!("token_validate for account {}", account_id),
+                })
             }
         }
     }
@@ -3177,7 +3287,7 @@ impl HimmelblauProvider {
                         }
                         Some(intune_device_id)
                     }
-                    Err(IdpError::NotFound) => {
+                    Err(IdpError::NotFound { .. }) => {
                         info!("🔵 Intune enrollment not required or not configured");
                         None
                     }
@@ -3248,7 +3358,10 @@ impl HimmelblauProvider {
                             ?e,
                             "Device auth failed for Intune device enrollment, delaying enrollment."
                         );
-                        return Err(IdpError::NotFound);
+                        return Err(IdpError::NotFound {
+                            what: "device auth".to_string(),
+                            where_: "Intune enrollment token acquisition".to_string(),
+                        });
                     } else {
                         error!(?e, "Acquiring token for Intune device enrollment failed.");
                         return Err(IdpError::BadRequest);
@@ -3327,7 +3440,10 @@ impl HimmelblauProvider {
                 }
             }
         } else {
-            Err(IdpError::NotFound)
+            Err(IdpError::NotFound {
+                what: "Intune policy".to_string(),
+                where_: "intune_enroll - apply_policy is disabled".to_string(),
+            })
         }
     }
 
