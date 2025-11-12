@@ -1302,10 +1302,24 @@ impl IdProvider for HimmelblauProvider {
         let hello_pin_retry_count = self.config.read().await.get_hello_pin_retry_count();
         let intune_enrollment_required =
             self.config.read().await.get_apply_policy() && !self.is_intune_enrolled(keystore).await;
-        if !self.is_domain_joined(keystore).await
+
+        let domain_joined = self.is_domain_joined(keystore).await;
+        let bad_pin_count = self.bad_pin_counter.bad_pin_count(account_id).await;
+        debug!(
+            "auth_method_selection domain_joined={} hello_key_present={} hello_enabled={} bad_pin_count={}/{} intune_required={} no_hello_pin={}",
+            domain_joined,
+            hello_key.is_some(),
+            hello_enabled,
+            bad_pin_count,
+            hello_pin_retry_count,
+            intune_enrollment_required,
+            no_hello_pin
+        );
+
+        if !domain_joined
             || hello_key.is_none()
             || !hello_enabled
-            || self.bad_pin_counter.bad_pin_count(account_id).await > hello_pin_retry_count
+            || bad_pin_count > hello_pin_retry_count
             || intune_enrollment_required
             || no_hello_pin
         {
@@ -1344,6 +1358,7 @@ impl IdProvider for HimmelblauProvider {
                     }
                 );
                 if !auth_init.passwordless() {
+                    debug!("passwordless_not_available falling_back_to_password azure_response_passwordless=false");
                     // Check if the network is even up prior to sending a
                     // password prompt.
                     if !self.attempt_online(tpm, SystemTime::now()).await {
@@ -1356,6 +1371,10 @@ impl IdProvider for HimmelblauProvider {
                     }
                     Ok((AuthRequest::Password, AuthCredHandler::None))
                 } else {
+                    debug!(
+                        "passwordless_available initiating_mfa_flow auth_options_count={} azure_passwordless=true",
+                        auth_options.len()
+                    );
                     let flow = net_down_check!(
                         self.client
                             .read()
@@ -1369,10 +1388,11 @@ impl IdProvider for HimmelblauProvider {
                             )
                             .await,
                         Err(MsalError::PasswordRequired) => {
+                            debug!("azure_returned_password_required despite_passwordless=true");
                             return Ok((AuthRequest::Password, AuthCredHandler::None));
                         },
                         Err(e) => {
-                            error!("{:?}", e);
+                            error!(?e, "Failed to initiate MFA flow");
                             return Err(IdpError::BadRequest);
                         }
                     );
@@ -1423,6 +1443,7 @@ impl IdProvider for HimmelblauProvider {
                 ))
             }
         } else {
+            debug!("using_hello_pin_auth domain_joined=true hello_key_present=true");
             // Check if the network is even up prior to sending a PIN prompt,
             // otherwise we duplicate the PIN prompt when the network goes down.
             if !self.attempt_online(tpm, SystemTime::now()).await {
@@ -2104,10 +2125,24 @@ impl IdProvider for HimmelblauProvider {
                         };
                     }
                 );
+
+                // Log which MFA method Azure selected
+                let mfa_method = resp
+                    .get_default_mfa_method_details()
+                    .map(|m| m.auth_method_id.clone())
+                    .unwrap_or_else(|| "none".to_string());
+                debug!(
+                    "azure_mfa_method_selected method={} has_fido_challenge={} has_msg={}",
+                    mfa_method,
+                    resp.fido_challenge.is_some(),
+                    !resp.msg.is_empty()
+                );
+
                 auth_handle_mfa_resp!(
                     resp,
                     // FIDO
                     {
+                        debug!("auth_path_fido using_fido_key_or_passkey");
                         let fido_challenge =
                             resp.fido_challenge.clone().ok_or(IdpError::BadRequest)?;
 
@@ -2123,7 +2158,7 @@ impl IdProvider for HimmelblauProvider {
                             AuthCacheAction::None
                         };
                         debug!(
-                            "passwordless_fido_available challenge_len={} allow_list_count={}",
+                            "fido_credentials challenge_len={} allow_list_count={}",
                             fido_challenge.len(),
                             fido_allow_list.len()
                         );
@@ -2139,6 +2174,7 @@ impl IdProvider for HimmelblauProvider {
                     },
                     // PROMPT
                     {
+                        debug!("auth_path_mfa_code using_otp_or_sms prompt_required");
                         let msg = resp.msg.clone();
                         *cred_handler = AuthCredHandler::MFA {
                             flow: resp,
@@ -2158,6 +2194,7 @@ impl IdProvider for HimmelblauProvider {
                     },
                     // POLL
                     {
+                        debug!("auth_path_mfa_poll using_authenticator_app_notification polling_required");
                         let msg = resp.msg.clone();
                         let polling_interval = resp.polling_interval.unwrap_or(5000);
                         *cred_handler = AuthCredHandler::MFA {
