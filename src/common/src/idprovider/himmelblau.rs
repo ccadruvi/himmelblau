@@ -2772,8 +2772,8 @@ impl HimmelblauProvider {
                         }
                         gt_groups
                     }
-                    Err(_e) => {
-                        debug!("Failed fetching user groups for {}", uuid);
+                    Err(e) => {
+                        error!("Failed fetching user groups for {}: {:?}", uuid, e);
                         /* If we failed to fetch the groups, and we have an old
                          * token, preserve the existing cached group memberships.
                          */

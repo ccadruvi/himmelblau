@@ -171,11 +171,17 @@ pub fn fido_auth(
     fido_allow_list: Vec<String>,
 ) -> Result<String, PamResultCode> {
     // Initialize AuthenticatorService
+    info!("🟦 FIDO auth init - challenge_len: {}, allow_list_count: {}",
+          fido_challenge.len(), fido_allow_list.len());
+
     let mut manager = AuthenticatorService::new().map_err(|e| {
-        error!("{:?}", e);
+        error!("🟦 Failed to create AuthenticatorService: {:?}", e);
         PamResultCode::PAM_CRED_INSUFFICIENT
     })?;
+
+    info!("🟦 Adding FIDO transports (U2F, USB HID, platform authenticators)");
     manager.add_u2f_usb_hid_platform_transports();
+    info!("🟦 FIDO transports initialized successfully");
 
     let challenge_str = json_to_string(&json!({
         "type": "webauthn.get",
