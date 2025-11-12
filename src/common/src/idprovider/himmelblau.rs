@@ -1269,6 +1269,8 @@ impl IdProvider for HimmelblauProvider {
         _machine_key: &tpm::structures::StorageKey,
         _shutdown_rx: &broadcast::Receiver<()>,
     ) -> Result<(AuthRequest, AuthCredHandler), IdpError> {
+        debug!("unix_user_online_auth_init account={} no_hello_pin={}", account_id, no_hello_pin);
+
         macro_rules! net_down_check {
             ($res:expr, $($pat:pat => $result:expr),*) => {
                 match $res {
@@ -2120,6 +2122,11 @@ impl IdProvider for HimmelblauProvider {
                         } else {
                             AuthCacheAction::None
                         };
+                        debug!(
+                            "passwordless_fido_available challenge_len={} allow_list_count={}",
+                            fido_challenge.len(),
+                            fido_allow_list.len()
+                        );
                         return Ok((
                             AuthResult::Next(AuthRequest::Fido {
                                 fido_allow_list,
@@ -2259,6 +2266,7 @@ impl IdProvider for HimmelblauProvider {
                 PamAuthRequest::MFAPoll { poll_attempt },
             ) => {
                 let max_poll_attempts = flow.max_poll_attempts.unwrap_or(180);
+                debug!("mfa_poll_attempt attempt={} max={}", poll_attempt, max_poll_attempts);
                 if poll_attempt > max_poll_attempts {
                     error!("MFA polling timed out");
                     return Err(IdpError::BadRequest);
@@ -2299,11 +2307,12 @@ impl IdProvider for HimmelblauProvider {
                             ));
                         }
                         e => {
-                            error!("{:?}", e);
+                            error!(?e, "MFA authentication failed");
                             return Ok((AuthResult::Denied(e.to_string()), AuthCacheAction::None));
                         }
                     }
                 );
+                debug!("mfa_poll_successful token_acquired");
                 let token2 = enroll_and_obtain_enrolled_token!(token);
                 match self.token_validate(account_id, &token2, None).await {
                     Ok(AuthResult::Success { token: token3 }) => {
@@ -2427,6 +2436,8 @@ impl IdProvider for HimmelblauProvider {
         no_hello_pin: bool,
         keystore: &mut D,
     ) -> Result<(AuthRequest, AuthCredHandler), IdpError> {
+        debug!("unix_user_offline_auth_init account={} no_hello_pin={}", account_id, no_hello_pin);
+
         let hello_key = self.fetch_hello_key(account_id, keystore).ok();
         let (sfa_enabled, hello_pin_retry_count, breakglass_enabled) = {
             let cfg = self.config.read().await;
@@ -2519,12 +2530,13 @@ impl IdProvider for HimmelblauProvider {
                             self.refresh_cache.add(account_id, &prt).await;
                         }
                         self.bad_pin_counter.reset_bad_pin_count(account_id).await;
+                        info!("Offline authentication successful");
                         Ok(AuthResult::Success {
                             token: token.clone(),
                         })
                     }
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(?e, "Offline Hello PIN authentication failed");
                         handle_hello_bad_pin_count!(self, account_id, keystore, |msg: &str| {
                             Ok(AuthResult::Denied(msg.to_string()))
                         });
