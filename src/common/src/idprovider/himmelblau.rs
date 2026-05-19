@@ -1190,6 +1190,13 @@ impl IdProvider for HimmelblauProvider {
             None => id.to_string().clone(),
         };
         if let Some((cn, _)) = split_username(&account_id) {
+            // Log every CN reaching this NSS fall-through. Operators can grep
+            // logs for `nss_existence_probe` to enumerate every symbolic name
+            // that gets probed against the directory and decide which ones to
+            // declare locally (e.g. via sysusers.d) to avoid the wasteful
+            // round-trip to Entra. Warn level so it ships to Datadog
+            // alongside the existing local-user warning below.
+            warn!("nss_existence_probe: cn={}", cn);
             let other_module_warn_users =
                 ["gdm", "sssd", "gnome-initial-setup", "systemd-coredump"];
             if other_module_warn_users.contains(&cn) {
