@@ -1473,9 +1473,8 @@ impl IdProvider for HimmelblauProvider {
                     Some(_) => return Ok(UserTokenState::UseCached),
                     // Otherwise, see if we should fake it
                     None => {
-                        let apply_policy = self.config.lock().await.get_apply_policy();
                         let mut auth_options = vec![];
-                        if apply_policy {
+                        if self.config.lock().await.get_use_intune_auth_resource() {
                             auth_options.push(AuthOption::IntuneEnable);
                         }
                         // Check if the user exists
@@ -1922,8 +1921,7 @@ impl IdProvider for HimmelblauProvider {
                 if is_remote_service {
                     auth_options.push(AuthOption::RemoteSession);
                 }
-                let apply_policy = self.config.lock().await.get_apply_policy();
-                if apply_policy {
+                if self.config.lock().await.get_use_intune_auth_resource() {
                     auth_options.push(AuthOption::IntuneEnable);
                 }
 
@@ -2261,7 +2259,7 @@ impl IdProvider for HimmelblauProvider {
                                 enable_passwordless_qr_bluetooth,
                                 enable_passwordless,
                                 mfa_method,
-                                apply_policy,
+                                use_intune_auth_resource,
                             ) = {
                                 let cfg = self.config.lock().await;
                                 (
@@ -2272,7 +2270,7 @@ impl IdProvider for HimmelblauProvider {
                                     cfg.get_enable_passwordless_qr_bluetooth(),
                                     cfg.get_enable_passwordless(),
                                     cfg.get_mfa_method(),
-                                    cfg.get_apply_policy(),
+                                    cfg.get_use_intune_auth_resource(),
                                 )
                             };
                             let is_remote_service = service.starts_with("remote:")
@@ -2302,7 +2300,7 @@ impl IdProvider for HimmelblauProvider {
                                     "Forcing MFA for device enrollment despite console password-only mode."
                                 );
                             }
-                            if apply_policy {
+                            if use_intune_auth_resource {
                                 auth_options.push(AuthOption::IntuneEnable);
                             }
 
@@ -2516,7 +2514,7 @@ impl IdProvider for HimmelblauProvider {
                     enable_passwordless_qr_bluetooth,
                     enable_passwordless,
                     mfa_method,
-                    apply_policy,
+                    use_intune_auth_resource,
                 ) = {
                     let cfg = self.config.lock().await;
                     (
@@ -2528,7 +2526,7 @@ impl IdProvider for HimmelblauProvider {
                         cfg.get_enable_passwordless_qr_bluetooth(),
                         cfg.get_enable_passwordless(),
                         cfg.get_mfa_method(),
-                        cfg.get_apply_policy(),
+                        cfg.get_use_intune_auth_resource(),
                     )
                 };
                 let is_remote_service = service.starts_with("remote:")
@@ -2561,7 +2559,7 @@ impl IdProvider for HimmelblauProvider {
                     if is_remote_service {
                         auth_options.push(AuthOption::RemoteSession);
                     }
-                    if apply_policy {
+                    if use_intune_auth_resource {
                         auth_options.push(AuthOption::IntuneEnable);
                     }
 
@@ -3989,8 +3987,7 @@ impl IdProvider for HimmelblauProvider {
                 if sfa_enabled {
                     opts.push(AuthOption::NoDAGFallback);
                 }
-                let apply_policy = self.config.lock().await.get_apply_policy();
-                if apply_policy {
+                if self.config.lock().await.get_use_intune_auth_resource() {
                     opts.push(AuthOption::IntuneEnable);
                 }
 
